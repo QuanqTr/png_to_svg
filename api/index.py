@@ -40,11 +40,11 @@ def convert_to_svg():
             "color",    
             "cutout",   
             "spline",   
-            16,         # filter_speckle (ignore noise)
+            16,         # filter_speckle
             6,          
             16,         
             60,         
-            15.0,       # length_threshold (higher = smoother curves, ignores jagged raster)
+            4.0,        # length_threshold (lowered back to 4.0 to restore smooth curves instead of polygons)
             10,         
             45,         
             8           

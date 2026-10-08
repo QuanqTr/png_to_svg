@@ -38,6 +38,11 @@
             filter: drop-shadow(0 20px 30px rgba(0,0,0,0.5));
             border-radius: 12px;
         }
+        /* Fix SVG stitching gaps by adding a tiny stroke to match the fill color */
+        .svg-container svg path {
+            stroke-width: 0.5px;
+            stroke-linejoin: round;
+        }
         /* Make white paths interactive! */
         .svg-container svg path[fill="#FFFFFF"] {
             cursor: pointer;
@@ -45,6 +50,12 @@
         }
         .svg-container svg path[fill="#FFFFFF"]:hover {
             filter: brightness(0.9);
+        }
+        /* Black paths should have a slightly thicker stroke to ensure crisp black outlines over gaps */
+        .svg-container svg path[fill="#000000"] {
+            stroke: #000000;
+            stroke-width: 1.5px;
+            pointer-events: none; /* Prevent clicking on black lines */
         }
         .color-swatch {
             transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -184,8 +195,12 @@
                     paths.forEach(p => {
                         // Any path that isn't black is colorable
                         if (p.getAttribute('fill') !== '#000000') {
+                            // Initialize stroke to match initial fill
+                            p.setAttribute('stroke', p.getAttribute('fill'));
+                            
                             p.addEventListener('click', function(e) {
                                 this.setAttribute('fill', selectedColor);
+                                this.setAttribute('stroke', selectedColor); // Ensure stroke matches fill to hide gaps
                             });
                         }
                     });
