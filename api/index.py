@@ -24,6 +24,15 @@ def convert_to_svg():
     file.save(input_path)
     
     try:
+        # Pre-process: Binarize image to strictly 2 colors (Black & White)
+        # This removes anti-aliasing gray pixels so vtracer can fit perfect smooth splines
+        from PIL import Image
+        with Image.open(input_path) as img:
+            gray = img.convert("L")
+            # Strict threshold: anything brighter than dark gray becomes pure white
+            bw = gray.point(lambda x: 255 if x > 180 else 0, mode="L").convert("RGB")
+            bw.save(input_path)
+
         # Convert logic
         vtracer.convert_image_to_svg_py(
             input_path, 
@@ -31,11 +40,11 @@ def convert_to_svg():
             "color",    
             "cutout",   
             "spline",   
-            10,         
+            16,         # filter_speckle (ignore noise)
             6,          
             16,         
             60,         
-            5.0,        
+            15.0,       # length_threshold (higher = smoother curves, ignores jagged raster)
             10,         
             45,         
             8           
