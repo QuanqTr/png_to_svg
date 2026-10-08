@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI SVG Coloring Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Outfit', 'sans-serif'] },
+                    colors: {
+                        brand: { 500: '#8A2BE2', 600: '#7B1FA2' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background: radial-gradient(circle at 10% 20%, rgb(14, 14, 20) 0%, rgb(20, 20, 30) 100%);
+            color: #fff;
+            min-height: 100vh;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .svg-container svg {
+            width: 100%;
+            height: auto;
+            max-height: 60vh;
+            filter: drop-shadow(0 20px 30px rgba(0,0,0,0.5));
+            border-radius: 12px;
+        }
+        /* Make white paths interactive! */
+        .svg-container svg path[fill="#FFFFFF"] {
+            cursor: pointer;
+            transition: fill 0.2s ease, filter 0.2s ease;
+        }
+        .svg-container svg path[fill="#FFFFFF"]:hover {
+            filter: brightness(0.9);
+        }
+        .color-swatch {
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .color-swatch.active {
+            transform: scale(1.2);
+            border: 2px solid white;
+        }
+        .loader {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-top: 4px solid #8A2BE2;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center p-6">
+
+    <div class="max-w-5xl w-full mx-auto space-y-8">
+        <!-- Header -->
+        <div class="text-center space-y-4">
+            <h1 class="text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
+                AI Vector Studio
+            </h1>
+            <p class="text-gray-400 text-lg">Convert sketches to separated coloring regions instantly.</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Left: Upload Section -->
+            <div class="glass p-8 rounded-3xl flex flex-col items-center justify-center space-y-6 relative overflow-hidden group">
+                <div class="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-pink-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+                
+                <label for="image-upload" class="cursor-pointer flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-gray-600 rounded-2xl hover:border-purple-500 transition-colors bg-gray-900/50">
+                    <svg class="w-12 h-12 text-gray-400 mb-4 group-hover:text-purple-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    <span class="text-gray-300 font-medium">Click or drag image to upload</span>
+                    <span class="text-sm text-gray-500 mt-2">PNG or JPG</span>
+                </label>
+                <input id="image-upload" type="file" accept="image/*" class="hidden" onchange="uploadImage(event)" />
+                
+                <div id="loading" class="hidden flex-col items-center space-y-3">
+                    <div class="loader"></div>
+                    <p class="text-purple-400 animate-pulse">Vectorizing using vtracer...</p>
+                </div>
+            </div>
+
+            <!-- Right: Interactive Result -->
+            <div class="glass p-8 rounded-3xl flex flex-col space-y-6 min-h-[400px]">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-2xl font-bold">Interactive Result</h2>
+                    <button id="download-btn" onclick="downloadSVG()" class="hidden px-5 py-2 bg-white/10 hover:bg-white/20 text-white rounded-full font-medium transition-colors border border-white/10 backdrop-blur-md flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        <span>Download SVG</span>
+                    </button>
+                </div>
+
+                <!-- Palette -->
+                <div id="palette" class="hidden flex flex-wrap gap-3 p-4 bg-black/30 rounded-2xl border border-white/5">
+                    <span class="text-sm text-gray-400 w-full mb-1">Select a color & click regions to paint:</span>
+                    <!-- Colors populated by JS -->
+                </div>
+
+                <div id="result-container" class="svg-container flex-1 flex items-center justify-center bg-gray-900/50 rounded-2xl border border-gray-700/50 p-4">
+                    <p class="text-gray-500 text-center">Upload an image to see the interactive SVG here.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentSvgStr = '';
+        let selectedColor = '#FF5733';
+        const colors = ['#FFFFFF', '#FF5733', '#33FF57', '#3357FF', '#F333FF', '#FFE633', '#33FFF6', '#FF33A1', '#8A2BE2', '#FF8C00'];
+
+        // Init palette
+        const palette = document.getElementById('palette');
+        colors.forEach((c, idx) => {
+            const btn = document.createElement('button');
+            btn.className = `color-swatch w-8 h-8 rounded-full shadow-lg ${idx === 1 ? 'active' : ''}`;
+            btn.style.backgroundColor = c;
+            btn.onclick = () => {
+                document.querySelectorAll('.color-swatch').forEach(el => el.classList.remove('active'));
+                btn.classList.add('active');
+                selectedColor = c;
+            };
+            palette.appendChild(btn);
+        });
+
+        async function uploadImage(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('result-container').innerHTML = '';
+            document.getElementById('download-btn').classList.add('hidden');
+            document.getElementById('palette').classList.add('hidden');
+
+            const formData = new FormData();
+            formData.append('image', file);
+
+            try {
+                // Point to /api/convert (Vercel serverless function route)
+                const response = await fetch('/api/convert', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.error || 'Conversion failed');
+                }
+
+                currentSvgStr = await response.text();
+                
+                // Render SVG
+                const container = document.getElementById('result-container');
+                container.innerHTML = currentSvgStr;
+                
+                // Make paths interactive
+                const svg = container.querySelector('svg');
+                if (svg) {
+                    // Set SVG width to 100% for responsiveness
+                    svg.setAttribute('width', '100%');
+                    svg.setAttribute('height', '100%');
+
+                    // Bind click events to coloring regions
+                    const paths = svg.querySelectorAll('path');
+                    paths.forEach(p => {
+                        // Any path that isn't black is colorable
+                        if (p.getAttribute('fill') !== '#000000') {
+                            p.addEventListener('click', function(e) {
+                                this.setAttribute('fill', selectedColor);
+                            });
+                        }
+                    });
+                }
+
+                document.getElementById('download-btn').classList.remove('hidden');
+                document.getElementById('palette').classList.remove('hidden');
+                document.getElementById('palette').classList.add('flex');
+            } catch (err) {
+                alert('Error: ' + err.message);
+                document.getElementById('result-container').innerHTML = '<p class="text-red-400">Failed to convert image.</p>';
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+            }
+        }
+
+        function downloadSVG() {
+            if (!currentSvgStr) return;
+            const svgEl = document.querySelector('#result-container svg');
+            if(svgEl) {
+                currentSvgStr = svgEl.outerHTML; // get colored version
+            }
+            const blob = new Blob([currentSvgStr], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'vectorized_coloring.svg';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+</html>
