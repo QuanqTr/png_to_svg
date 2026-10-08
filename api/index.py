@@ -4,6 +4,7 @@ import re
 import tempfile
 import os
 
+# Create Flask app and serve static files from the parent directory
 app = Flask(__name__)
 
 @app.route('/api/convert', methods=['POST'])
@@ -71,6 +72,18 @@ def convert_to_svg():
         # Cleanup
         if os.path.exists(input_path): os.remove(input_path)
         if os.path.exists(output_path): os.remove(output_path)
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_frontend(path):
+    # This serves the index.html from the root folder
+    root_dir = os.path.dirname(os.path.dirname(__file__))
+    html_path = os.path.join(root_dir, 'index.html')
+    
+    if os.path.exists(html_path):
+        with open(html_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    return "UI not found", 404
 
 if __name__ == '__main__':
     app.run(debug=True)
