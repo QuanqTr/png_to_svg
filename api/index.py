@@ -24,13 +24,21 @@ def convert_to_svg():
     file.save(input_path)
     
     try:
-        # Pre-process: Binarize image to strictly 2 colors (Black & White)
-        # This removes anti-aliasing gray pixels so vtracer can fit perfect smooth splines
+        # Pre-process: Handle alpha channel and Binarize
         from PIL import Image
         with Image.open(input_path) as img:
-            gray = img.convert("L")
-            # Strict threshold: anything brighter than dark gray becomes pure white
-            bw = gray.point(lambda x: 255 if x > 180 else 0, mode="L").convert("RGB")
+            # Handle transparency by blending with white background
+            if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
+                bg = Image.new("RGB", img.size, (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                bg.paste(img, mask=img.split()[3])
+                gray = bg.convert("L")
+            else:
+                gray = img.convert("L")
+            
+            # Strict threshold (200) to thicken lines and guarantee they close
+            bw = gray.point(lambda x: 255 if x > 200 else 0, mode="L").convert("RGB")
             bw.save(input_path)
 
         # Convert logic
@@ -40,7 +48,7 @@ def convert_to_svg():
             "color",    
             "cutout",   
             "spline",   
-            16,         # filter_speckle
+            4,          # filter_speckle (Restored to 4. If too high, vtracer deletes thin lines causing holes!)
             6,          # color_precision
             16,         # layer_difference
             120,        # corner_threshold (MUST BE > 90 to smooth 90-degree pixel staircases)
