@@ -25,7 +25,7 @@ def convert_to_svg():
     
     try:
         # Pre-process: Handle alpha channel and Binarize
-        from PIL import Image
+        from PIL import Image, ImageFilter
         with Image.open(input_path) as img:
             # Handle transparency by blending with white background
             if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
@@ -37,8 +37,16 @@ def convert_to_svg():
             else:
                 gray = img.convert("L")
             
-            # Strict threshold (200) to thicken lines and guarantee they close
-            bw = gray.point(lambda x: 255 if x > 200 else 0, mode="L").convert("RGB")
+            # Anti-aliasing / smoothing trick:
+            # 1. Upscale 2x to give vtracer more resolution for curves
+            # 2. Blur to destroy the 90-degree pixel staircases
+            # 3. Threshold to get a perfectly smooth, continuous edge
+            w, h = gray.size
+            smoothed = gray.resize((w * 2, h * 2), Image.BICUBIC)
+            smoothed = smoothed.filter(ImageFilter.GaussianBlur(radius=1))
+            
+            # Threshold (200) to guarantee thick, closed lines
+            bw = smoothed.point(lambda x: 255 if x > 200 else 0, mode="L").convert("RGB")
             bw.save(input_path)
 
         # Convert logic
@@ -48,10 +56,10 @@ def convert_to_svg():
             "color",    
             "cutout",   
             "spline",   
-            4,          # filter_speckle (Restored to 4. If too high, vtracer deletes thin lines causing holes!)
+            4,          # filter_speckle
             6,          # color_precision
             16,         # layer_difference
-            120,        # corner_threshold (MUST BE > 90 to smooth 90-degree pixel staircases)
+            60,         # corner_threshold (Restored to 60 to KEEP 90-degree canvas corners and sharp drawing tips)
             4.0,        # length_threshold
             10,         # max_iterations
             45,         # splice_threshold
