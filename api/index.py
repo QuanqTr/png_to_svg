@@ -41,13 +41,13 @@ def convert_to_svg():
             "cutout",   
             "spline",   
             16,         # filter_speckle
-            6,          
-            16,         
-            60,         
-            4.0,        # length_threshold (lowered back to 4.0 to restore smooth curves instead of polygons)
-            10,         
-            45,         
-            8           
+            6,          # color_precision
+            16,         # layer_difference
+            120,        # corner_threshold (MUST BE > 90 to smooth 90-degree pixel staircases)
+            4.0,        # length_threshold
+            10,         # max_iterations
+            45,         # splice_threshold
+            8           # path_precision
         )
         
         # Post-process for coloring regions
