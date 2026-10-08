@@ -168,6 +168,13 @@
                 // Make paths interactive
                 const svg = container.querySelector('svg');
                 if (svg) {
+                    // Extract original width and height to set viewBox for proper scaling
+                    const w = svg.getAttribute('width');
+                    const h = svg.getAttribute('height');
+                    if (w && h && !svg.hasAttribute('viewBox')) {
+                        svg.setAttribute('viewBox', `0 0 ${parseInt(w)} ${parseInt(h)}`);
+                    }
+
                     // Set SVG width to 100% for responsiveness
                     svg.setAttribute('width', '100%');
                     svg.setAttribute('height', '100%');
