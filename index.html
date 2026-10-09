@@ -3,18 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI SVG Coloring Studio</title>
+    <title>AI SVG Batch Studio</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <!-- JSZip and FileSaver for bulk downloading -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    
     <script>
         tailwind.config = {
             darkMode: 'class',
             theme: {
                 extend: {
                     fontFamily: { sans: ['Outfit', 'sans-serif'] },
-                    colors: {
-                        brand: { 500: '#8A2BE2', 600: '#7B1FA2' }
-                    }
+                    colors: { brand: { 500: '#8A2BE2', 600: '#7B1FA2' } }
                 }
             }
         }
@@ -33,210 +35,360 @@
         }
         .svg-container svg {
             width: 100%;
-            height: auto;
-            max-height: 60vh;
-            filter: drop-shadow(0 20px 30px rgba(0,0,0,0.5));
-            border-radius: 12px;
+            height: 100%;
+            max-height: 400px;
+            filter: drop-shadow(0 10px 15px rgba(0,0,0,0.5));
         }
         /* Make white paths interactive! */
         .svg-container svg path[fill="#FFFFFF"] {
-            cursor: pointer;
-            transition: fill 0.2s ease, filter 0.2s ease;
+            cursor: crosshair;
+            transition: filter 0.2s ease;
         }
         .svg-container svg path[fill="#FFFFFF"]:hover {
-            filter: brightness(0.9);
+            filter: brightness(0.85);
         }
-        /* Black paths should have pointer-events disabled */
+        /* Black paths should have pointer-events disabled so we click THROUGH them if needed */
         .svg-container svg path[fill="#000000"] {
-            pointer-events: none; /* Prevent clicking on black lines */
+            pointer-events: none; 
         }
         .color-swatch {
             transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            cursor: pointer;
         }
         .color-swatch.active {
-            transform: scale(1.2);
+            transform: scale(1.3) translateY(-2px);
             border: 2px solid white;
+            box-shadow: 0 4px 12px rgba(255,255,255,0.2);
         }
-        .loader {
-            border: 4px solid rgba(255, 255, 255, 0.1);
-            border-top: 4px solid #8A2BE2;
+        .loader-spin {
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top: 3px solid #8A2BE2;
             border-radius: 50%;
-            width: 40px;
-            height: 40px;
+            width: 24px;
+            height: 24px;
             animation: spin 1s linear infinite;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        #zoom-modal svg {
+            max-height: 85vh;
+            width: auto;
+            max-width: 95vw;
+        }
     </style>
 </head>
-<body class="flex flex-col items-center justify-center p-6">
+<body class="flex flex-col items-center p-6 pb-40">
 
-    <div class="max-w-5xl w-full mx-auto space-y-8">
-        <!-- Header -->
-        <div class="text-center space-y-4">
-            <h1 class="text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
-                AI Vector Studio
-            </h1>
-            <p class="text-gray-400 text-lg">Convert sketches to separated coloring regions instantly.</p>
-        </div>
+    <!-- Header -->
+    <div class="text-center space-y-3 mb-10 mt-4">
+        <h1 class="text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
+            Batch Vector Studio
+        </h1>
+        <p class="text-gray-400 text-lg">Upload up to 10 images. Auto-trace, interactively color, and export.</p>
+    </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <!-- Left: Upload Section -->
-            <div class="glass p-8 rounded-3xl flex flex-col items-center justify-center space-y-6 relative overflow-hidden group">
-                <div class="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-pink-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
-                
-                <label for="image-upload" class="cursor-pointer flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-gray-600 rounded-2xl hover:border-purple-500 transition-colors bg-gray-900/50">
-                    <svg class="w-12 h-12 text-gray-400 mb-4 group-hover:text-purple-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                    <span class="text-gray-300 font-medium">Click or drag image to upload</span>
-                    <span class="text-sm text-gray-500 mt-2">PNG or JPG</span>
-                </label>
-                <input id="image-upload" type="file" accept="image/*" class="hidden" onchange="uploadImage(event)" />
-                
-                <div id="loading" class="hidden flex-col items-center space-y-3">
-                    <div class="loader"></div>
-                    <p class="text-purple-400 animate-pulse">Vectorizing using vtracer...</p>
-                </div>
+    <!-- Upload Zone -->
+    <div class="max-w-4xl w-full glass p-8 rounded-3xl flex flex-col items-center justify-center relative group mb-8 shadow-2xl">
+        <label for="image-upload" class="cursor-pointer flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-gray-600 rounded-2xl hover:border-purple-500 hover:bg-purple-900/10 transition-all bg-gray-900/50">
+            <svg class="w-10 h-10 text-gray-400 mb-3 group-hover:text-purple-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+            <span class="text-gray-300 font-medium text-lg">Click or drag up to 10 PNG/JPGs here</span>
+        </label>
+        <input id="image-upload" type="file" accept="image/*" multiple class="hidden" onchange="handleUpload(event)" />
+        
+        <!-- Upload Progress indicator -->
+        <div id="upload-progress" class="hidden mt-6 w-full max-w-md">
+            <div class="flex justify-between text-sm text-purple-300 mb-2">
+                <span id="progress-text">Processing 0 / 0</span>
+                <div class="loader-spin w-4 h-4 border-2"></div>
             </div>
-
-            <!-- Right: Interactive Result -->
-            <div class="glass p-8 rounded-3xl flex flex-col space-y-6 min-h-[400px]">
-                <div class="flex justify-between items-center">
-                    <h2 class="text-2xl font-bold">Interactive Result</h2>
-                    <button id="download-btn" onclick="downloadSVG()" class="hidden px-5 py-2 bg-white/10 hover:bg-white/20 text-white rounded-full font-medium transition-colors border border-white/10 backdrop-blur-md flex items-center space-x-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                        <span>Download SVG</span>
-                    </button>
-                </div>
-
-                <!-- Palette -->
-                <div id="palette" class="hidden flex flex-wrap gap-3 p-4 bg-black/30 rounded-2xl border border-white/5">
-                    <span class="text-sm text-gray-400 w-full mb-1">Select a color & click regions to paint:</span>
-                    <!-- Colors populated by JS -->
-                </div>
-
-                <div id="result-container" class="svg-container flex-1 flex items-center justify-center bg-gray-900/50 rounded-2xl border border-gray-700/50 p-4">
-                    <p class="text-gray-500 text-center">Upload an image to see the interactive SVG here.</p>
-                </div>
+            <div class="w-full bg-gray-700 rounded-full h-2">
+                <div id="progress-bar" class="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
             </div>
         </div>
     </div>
 
-    <script>
-        let currentSvgStr = '';
-        let selectedColor = '#FF5733';
-        const colors = ['#FFFFFF', '#FF5733', '#33FF57', '#3357FF', '#F333FF', '#FFE633', '#33FFF6', '#FF33A1', '#8A2BE2', '#FF8C00'];
+    <!-- Global Actions -->
+    <div id="global-actions" class="hidden max-w-7xl w-full flex justify-between items-center mb-6 px-4">
+        <div class="text-gray-400 font-medium"><span id="total-count">0</span> SVGs Ready</div>
+        <div class="flex space-x-4">
+            <button onclick="clearAll()" class="px-5 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold rounded-xl transition-colors border border-red-500/20 flex items-center space-x-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                <span>Clear All</span>
+            </button>
+            <button onclick="downloadAll()" class="px-6 py-2.5 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-purple-500/25 flex items-center space-x-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                <span>Download All (ZIP)</span>
+            </button>
+        </div>
+    </div>
 
-        // Init palette
-        const palette = document.getElementById('palette');
+    <!-- Gallery Grid -->
+    <div id="gallery" class="max-w-7xl w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 px-4">
+        <!-- Cards injected via JS -->
+    </div>
+
+    <!-- Pinned Palette -->
+    <div id="palette-bar" class="fixed bottom-8 left-1/2 transform -translate-x-1/2 glass px-8 py-4 rounded-full flex items-center space-x-4 shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-40">
+        <span class="text-sm text-gray-300 font-semibold pr-3 border-r border-gray-600 uppercase tracking-wider">Paint Color</span>
+        <div id="palette-colors" class="flex space-x-3 items-center">
+            <!-- Colors injected via JS -->
+        </div>
+    </div>
+
+    <!-- Fullscreen Zoom Modal -->
+    <div id="zoom-modal" class="hidden fixed inset-0 z-50 bg-gray-900/95 flex flex-col items-center justify-center p-6 backdrop-blur-sm">
+        <div class="absolute top-6 right-6 flex space-x-3 z-50">
+            <button id="modal-download" class="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-xl transition-colors backdrop-blur-md border border-white/10 flex items-center space-x-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                <span>Save</span>
+            </button>
+            <button onclick="closeModal()" class="px-5 py-2.5 bg-red-500/20 hover:bg-red-500/40 text-red-300 font-semibold rounded-xl transition-colors border border-red-500/20">
+                Close (Esc)
+            </button>
+        </div>
+        
+        <p class="absolute top-6 left-6 text-gray-400 font-medium">✨ You can paint directly while zoomed in!</p>
+
+        <!-- SVG element will be temporarily moved here -->
+        <div id="modal-content" class="w-full h-full flex items-center justify-center svg-container relative"></div>
+    </div>
+
+    <script>
+        // State
+        const items = new Map(); // id -> { name, originalName }
+        let selectedColor = '#FF5733';
+        const colors = [
+            '#FFFFFF', '#FF5733', '#33FF57', '#3357FF', '#F333FF', 
+            '#FFE633', '#33FFF6', '#FF33A1', '#8A2BE2', '#FF8C00',
+            '#111111', '#E2B08A' // Added dark and skin tones
+        ];
+        let currentlyZoomedId = null;
+
+        // Init Palette
+        const paletteContainer = document.getElementById('palette-colors');
         colors.forEach((c, idx) => {
-            const btn = document.createElement('button');
-            btn.className = `color-swatch w-8 h-8 rounded-full shadow-lg ${idx === 1 ? 'active' : ''}`;
+            const btn = document.createElement('div');
+            btn.className = `color-swatch w-8 h-8 rounded-full shadow-inner ${idx === 1 ? 'active' : ''}`;
             btn.style.backgroundColor = c;
             btn.onclick = () => {
                 document.querySelectorAll('.color-swatch').forEach(el => el.classList.remove('active'));
                 btn.classList.add('active');
                 selectedColor = c;
             };
-            palette.appendChild(btn);
+            paletteContainer.appendChild(btn);
         });
 
-        async function uploadImage(event) {
-            const file = event.target.files[0];
-            if (!file) return;
+        // Upload Handler
+        async function handleUpload(event) {
+            const files = Array.from(event.target.files).slice(0, 10); // Max 10
+            if (files.length === 0) return;
 
-            document.getElementById('loading').classList.remove('hidden');
-            document.getElementById('result-container').innerHTML = '';
-            document.getElementById('download-btn').classList.add('hidden');
-            document.getElementById('palette').classList.add('hidden');
+            const progressContainer = document.getElementById('upload-progress');
+            const progressText = document.getElementById('progress-text');
+            const progressBar = document.getElementById('progress-bar');
+            
+            progressContainer.classList.remove('hidden');
+            let completed = 0;
 
-            const formData = new FormData();
-            formData.append('image', file);
-
-            try {
-                // Point to /api/convert (Vercel serverless function route)
-                const response = await fetch('/api/convert', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.error || 'Conversion failed');
-                }
-
-                currentSvgStr = await response.text();
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                progressText.innerText = `Processing ${completed + 1} / ${files.length}: ${file.name}`;
                 
-                // Render SVG
-                const container = document.getElementById('result-container');
-                container.innerHTML = currentSvgStr;
-                
-                // Make paths interactive and fix layering
-                const svg = container.querySelector('svg');
-                if (svg) {
-                    // Extract original width and height to set viewBox for proper scaling
-                    const w = svg.getAttribute('width');
-                    const h = svg.getAttribute('height');
-                    if (w && h && !svg.hasAttribute('viewBox')) {
-                        svg.setAttribute('viewBox', `0 0 ${parseInt(w)} ${parseInt(h)}`);
-                    }
-
-                    // Set SVG width to 100% for responsiveness
-                    svg.setAttribute('width', '100%');
-                    svg.setAttribute('height', '100%');
-
-                    // Bind click events to coloring regions
-                    const paths = Array.from(svg.querySelectorAll('path'));
+                try {
+                    const formData = new FormData();
+                    formData.append('image', file);
                     
-                    // REORDER PATHS: Move all black outlines to the end of the SVG 
-                    // so they are drawn ON TOP of the colored regions (z-index hack).
-                    // This allows colored regions to expand underneath without eating the lines!
-                    const blackPaths = paths.filter(p => p.getAttribute('fill') === '#000000');
-                    blackPaths.forEach(p => svg.appendChild(p));
-
-                    paths.forEach(p => {
-                        // Any path that isn't black is colorable
-                        if (p.getAttribute('fill') !== '#000000') {
-                            // Initialize stroke to match initial fill
-                            p.setAttribute('stroke', p.getAttribute('fill'));
-                            // Make the colored stroke thick so it bleeds into the black line's area
-                            // The black line on top will cover this bleed perfectly!
-                            p.setAttribute('stroke-width', '6');
-                            p.setAttribute('stroke-linejoin', 'round');
-                            
-                            p.addEventListener('click', function(e) {
-                                this.setAttribute('fill', selectedColor);
-                                this.setAttribute('stroke', selectedColor);
-                            });
-                        }
-                    });
+                    const response = await fetch('/api/convert', { method: 'POST', body: formData });
+                    if (!response.ok) throw new Error('API Error');
+                    
+                    const svgText = await response.text();
+                    
+                    // Generate unique ID
+                    const id = 'svg_' + Date.now() + '_' + Math.floor(Math.random()*1000);
+                    const baseName = file.name.split('.')[0] || 'vector';
+                    items.set(id, { name: baseName });
+                    
+                    createGalleryCard(id, baseName, svgText);
+                    updateUI();
+                } catch (e) {
+                    console.error("Failed to process", file.name, e);
                 }
 
-                document.getElementById('download-btn').classList.remove('hidden');
-                document.getElementById('palette').classList.remove('hidden');
-                document.getElementById('palette').classList.add('flex');
-            } catch (err) {
-                alert('Error: ' + err.message);
-                document.getElementById('result-container').innerHTML = '<p class="text-red-400">Failed to convert image.</p>';
-            } finally {
-                document.getElementById('loading').classList.add('hidden');
+                completed++;
+                progressBar.style.width = `${(completed / files.length) * 100}%`;
+            }
+
+            setTimeout(() => {
+                progressContainer.classList.add('hidden');
+                progressBar.style.width = '0%';
+                event.target.value = ''; // reset input
+            }, 1000);
+        }
+
+        // Create UI Card
+        function createGalleryCard(id, name, svgContent) {
+            const gallery = document.getElementById('gallery');
+            const card = document.createElement('div');
+            card.id = `card-${id}`;
+            card.className = "glass p-4 rounded-3xl flex flex-col group relative transition-all hover:border-purple-500/30";
+            
+            card.innerHTML = `
+                <div class="absolute top-2 left-4 px-2 py-1 bg-black/40 rounded-md text-xs text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity z-10 truncate max-w-[150px]">
+                    ${name}
+                </div>
+                <div class="svg-container bg-white/5 rounded-2xl flex-1 flex items-center justify-center p-2 min-h-[250px]" id="wrap-${id}">
+                    ${svgContent}
+                </div>
+                <div class="flex justify-between items-center mt-4 pt-2 border-t border-white/5">
+                    <button onclick="zoomImage('${id}')" class="px-4 py-1.5 bg-white/5 hover:bg-white/10 text-gray-300 rounded-lg text-sm flex items-center space-x-2 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"></path></svg>
+                        <span>Zoom</span>
+                    </button>
+                    <div class="flex space-x-2">
+                        <button onclick="downloadSingle('${id}')" title="Download SVG" class="p-2 bg-purple-500/20 hover:bg-purple-500/40 text-purple-300 rounded-lg transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        </button>
+                        <button onclick="deleteSingle('${id}')" title="Delete" class="p-2 bg-red-500/10 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    </div>
+                </div>
+            `;
+            gallery.appendChild(card);
+            
+            // Post-process the injected SVG
+            const svg = card.querySelector('svg');
+            if (svg) {
+                // ViewBox setup
+                const w = svg.getAttribute('width');
+                const h = svg.getAttribute('height');
+                if (w && h && !svg.hasAttribute('viewBox')) {
+                    svg.setAttribute('viewBox', `0 0 ${parseInt(w)} ${parseInt(h)}`);
+                }
+                svg.removeAttribute('width');
+                svg.removeAttribute('height');
+                svg.style.width = '100%';
+                svg.style.height = '100%';
+
+                // Layering Fix & Coloring Logic
+                const paths = Array.from(svg.querySelectorAll('path'));
+                const blackPaths = paths.filter(p => p.getAttribute('fill') === '#000000');
+                
+                // Move black strokes to the end so they draw on top
+                blackPaths.forEach(p => svg.appendChild(p));
+
+                paths.forEach(p => {
+                    if (p.getAttribute('fill') !== '#000000') {
+                        p.setAttribute('stroke', p.getAttribute('fill'));
+                        p.setAttribute('stroke-width', '6');
+                        p.setAttribute('stroke-linejoin', 'round');
+                        
+                        p.addEventListener('click', function(e) {
+                            this.setAttribute('fill', selectedColor);
+                            this.setAttribute('stroke', selectedColor);
+                        });
+                    }
+                });
             }
         }
 
-        function downloadSVG() {
-            if (!currentSvgStr) return;
-            const svgEl = document.querySelector('#result-container svg');
-            if(svgEl) {
-                currentSvgStr = svgEl.outerHTML; // get colored version
+        // Global UI Update
+        function updateUI() {
+            const count = items.size;
+            document.getElementById('total-count').innerText = count;
+            const globalActions = document.getElementById('global-actions');
+            if (count > 0) {
+                globalActions.classList.remove('hidden');
+            } else {
+                globalActions.classList.add('hidden');
             }
-            const blob = new Blob([currentSvgStr], { type: 'image/svg+xml' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'vectorized_coloring.svg';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
         }
+
+        // Deletions
+        function deleteSingle(id) {
+            const card = document.getElementById(`card-${id}`);
+            if (card) card.remove();
+            items.delete(id);
+            updateUI();
+        }
+
+        function clearAll() {
+            if(!confirm("Are you sure you want to delete all vectors?")) return;
+            document.getElementById('gallery').innerHTML = '';
+            items.clear();
+            updateUI();
+        }
+
+        // Downloads
+        function downloadSingle(id) {
+            const wrap = document.getElementById(`wrap-${id}`);
+            if (!wrap) return;
+            const svgEl = wrap.querySelector('svg');
+            if (!svgEl) return;
+            
+            const content = svgEl.outerHTML;
+            const blob = new Blob([content], { type: 'image/svg+xml' });
+            saveAs(blob, `${items.get(id).name}_colored.svg`);
+        }
+
+        async function downloadAll() {
+            if (items.size === 0) return;
+            const zip = new JSZip();
+            const folder = zip.folder("Colored_Vectors");
+            
+            items.forEach((data, id) => {
+                const wrap = document.getElementById(`wrap-${id}`);
+                const svgEl = wrap ? wrap.querySelector('svg') : null;
+                if (svgEl) {
+                    folder.file(`${data.name}.svg`, svgEl.outerHTML);
+                }
+            });
+            
+            const content = await zip.generateAsync({type:"blob"});
+            saveAs(content, "AI_Vector_Studio_Batch.zip");
+        }
+
+        // Zoom Modal Logic
+        function zoomImage(id) {
+            currentlyZoomedId = id;
+            const wrap = document.getElementById(`wrap-${id}`);
+            const svgEl = wrap.querySelector('svg');
+            const modal = document.getElementById('zoom-modal');
+            const modalContent = document.getElementById('modal-content');
+            
+            // Move the actual SVG DOM node into the modal (preserves all states/listeners)
+            modalContent.appendChild(svgEl);
+            
+            // Update modal download button
+            const dlBtn = document.getElementById('modal-download');
+            dlBtn.onclick = () => downloadSingle(id);
+
+            modal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden'; // Prevent scrolling
+        }
+
+        function closeModal() {
+            if (!currentlyZoomedId) return;
+            
+            const wrap = document.getElementById(`wrap-${currentlyZoomedId}`);
+            const modal = document.getElementById('zoom-modal');
+            const modalContent = document.getElementById('modal-content');
+            const svgEl = modalContent.querySelector('svg');
+            
+            // Move it back to the gallery card
+            if (wrap && svgEl) {
+                wrap.appendChild(svgEl);
+            }
+            
+            modal.classList.add('hidden');
+            document.body.style.overflow = 'auto';
+            currentlyZoomedId = null;
+        }
+
+        // Esc key to close modal
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && currentlyZoomedId) closeModal();
+        });
     </script>
 </body>
 </html>
