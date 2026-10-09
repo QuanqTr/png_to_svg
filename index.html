@@ -38,11 +38,6 @@
             filter: drop-shadow(0 20px 30px rgba(0,0,0,0.5));
             border-radius: 12px;
         }
-        /* Fix SVG stitching gaps by adding a tiny stroke to match the fill color */
-        .svg-container svg path {
-            stroke-width: 0.5px;
-            stroke-linejoin: round;
-        }
         /* Make white paths interactive! */
         .svg-container svg path[fill="#FFFFFF"] {
             cursor: pointer;
@@ -51,10 +46,8 @@
         .svg-container svg path[fill="#FFFFFF"]:hover {
             filter: brightness(0.9);
         }
-        /* Black paths should have a slightly thicker stroke to ensure crisp black outlines over gaps */
+        /* Black paths should have pointer-events disabled */
         .svg-container svg path[fill="#000000"] {
-            stroke: #000000;
-            stroke-width: 1.5px;
             pointer-events: none; /* Prevent clicking on black lines */
         }
         .color-swatch {
@@ -176,7 +169,7 @@
                 const container = document.getElementById('result-container');
                 container.innerHTML = currentSvgStr;
                 
-                // Make paths interactive
+                // Make paths interactive and fix layering
                 const svg = container.querySelector('svg');
                 if (svg) {
                     // Extract original width and height to set viewBox for proper scaling
@@ -191,16 +184,27 @@
                     svg.setAttribute('height', '100%');
 
                     // Bind click events to coloring regions
-                    const paths = svg.querySelectorAll('path');
+                    const paths = Array.from(svg.querySelectorAll('path'));
+                    
+                    // REORDER PATHS: Move all black outlines to the end of the SVG 
+                    // so they are drawn ON TOP of the colored regions (z-index hack).
+                    // This allows colored regions to expand underneath without eating the lines!
+                    const blackPaths = paths.filter(p => p.getAttribute('fill') === '#000000');
+                    blackPaths.forEach(p => svg.appendChild(p));
+
                     paths.forEach(p => {
                         // Any path that isn't black is colorable
                         if (p.getAttribute('fill') !== '#000000') {
                             // Initialize stroke to match initial fill
                             p.setAttribute('stroke', p.getAttribute('fill'));
+                            // Make the colored stroke thick so it bleeds into the black line's area
+                            // The black line on top will cover this bleed perfectly!
+                            p.setAttribute('stroke-width', '4');
+                            p.setAttribute('stroke-linejoin', 'round');
                             
                             p.addEventListener('click', function(e) {
                                 this.setAttribute('fill', selectedColor);
-                                this.setAttribute('stroke', selectedColor); // Ensure stroke matches fill to hide gaps
+                                this.setAttribute('stroke', selectedColor);
                             });
                         }
                     });
